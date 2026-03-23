@@ -47,6 +47,17 @@ def fetch_docs(url: str) -> str:
     print(f"  Fetched {len(clean_text)} characters")
     return clean_text
 
+def read_local_file(filepath: str) -> str:
+    """
+    Read a local markdown or text file and return its contents.
+    """
+    print(f"Reading: {filepath}")
+    
+    with open(filepath, "r", encoding="utf-8") as f:
+        text = f.read()
+    
+    print(f"  Read {len(text)} characters")
+    return text
 
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> list[str]:
     """
@@ -83,11 +94,17 @@ if __name__ == "__main__":
             print("Usage: python scraper.py <url>")
             sys.exit(1)
     
-    url = sys.argv[1]
-    text = fetch_docs(url)
+    source = sys.argv[1]
+
+    # Detect if it's a local file or a URL
+    if source.startswith("http"):
+         text = fetch_docs(source)
+    else:
+        text = read_local_file(source)
+    
     chunks = chunk_text(text)
 
-    print(f"\n--- First chunk preview ---\n")
-    print(chunks[0])
-    print(f"\n--- Second chunk preview ---\n")
-    print(chunks[1])
+    # print(f"\n--- First chunk preview ---\n")
+    # print(chunks[0])
+    # print(f"\n--- Second chunk preview ---\n")
+    # print(chunks[1])

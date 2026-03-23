@@ -2,21 +2,19 @@
 Layer 3: The LLM Call
 
 Goal: Take the relevant chunks from Layer 2 and use them as context
-for Claude to answer the user's question, grounded in the actual docs.
+for Ollama to answer the user's question, grounded in the actual docs.
 """
 
 import os
-import anthropic
-from dotenv import load_dotenv
+import sys
+import ollama
 from embeddings import build_index, query_index
-from scraper import fetch_docs, chunk_text
-
-load_dotenv()
+from scraper import fetch_docs, chunk_text, read_local_file
 
 def build_prompt(question: str, chunks: list[str]) -> str:
     """
     Combine the retrieved chunks and the user's question into a prompt.
-    The chunks act as Claude's only source of truth.
+    The chunks act as Ollama's only source of truth.
     """
     context = ""
     for i, chunk in enumerate(chunks):
@@ -38,7 +36,7 @@ def ask(question: str, collection) -> str:
     Full RAG pipeline:
     1. Retrieve relevant chunks from ChromaDB
     2. Build a prompt with those chunks as context
-    3. Send to Claude and return the answer
+    3. Send to Ollama and return the answer
     """
     # Layer 2 — retrieve relevant chunks
     chunks = query_index(collection, question)
@@ -46,35 +44,42 @@ def ask(question: str, collection) -> str:
     # Build the grounded prompt
     prompt = build_prompt(question, chunks)
 
-    # Layer 3 — call Claude
-    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    # Layer 3 — Using Ollama
     
-    response = client.messages.create(
-        model="claude-opus-4-6",
-        max_tokens=1024,
+    response = ollama.chat(
+        model="llama3.2",
         messages=[
             {"role": "user", "content": prompt}
         ]
     )
 
-    return response.content[0].text
+    return response["message"]["content"]
 
 
 if __name__ == "__main__":
-    # Test the full pipeline end to end with fake chunks
-    fake_chunks = [
-        "requests.get(url, params=None) sends a GET request and returns a Response object.",
-        "requests.post(url, data=None, json=None) sends a POST request with a body.",
-        "Response.status_code returns the HTTP status code as an integer, e.g. 200 or 404.",
-        "Response.json() parses the response body as JSON and returns a Python dict.",
-        "Session objects let you persist cookies and headers across multiple requests.",
-        "Timeout parameter controls how long to wait for the server before giving up.",
-    ]
 
+    if len(sys.argv) < 2:
+        print("Usage: python agent.py <filepath or url>")
+        sys.exit(1)
+
+    source = sys.argv[1]
+
+    # Load and chunk the source
+    if source.startswith("http"):
+        text = fetch_docs(source)
+    else:
+        text = read_local_file(source)
+
+    chunks = chunk_text(text)
+
+    # Build the index
     print("Indexing chunks...")
-    collection = build_index(fake_chunks)
+    collection = build_index(chunks)
 
-    question = "How do I send a POST request with JSON data?"
-    print(f"\nQuestion: {question}")
-    print(f"\nAnswer:")
-    print(ask(question, collection))
+    # Ask questions in a loop
+    print("\nReady! Ask questions about your docs. Type 'exit' to quit.\n")
+    while True:
+        question = input("You: ")
+        if question.lower() == "exit":
+            break
+        print(f"\nAnswer: {ask(question, collection)}\n")
