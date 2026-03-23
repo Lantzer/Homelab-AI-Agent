@@ -8,8 +8,9 @@ Runs entirely on your machine using Ollama. No API costs, no internet required o
 
 - Reads local markdown/text files or scrapes docs from a URL
 - Chunks and indexes the content into a local vector database (ChromaDB)
-- Passes those chunks to a local LLM (llama3.2 via Ollama) to generate an answer with the context of the contents it is fed
 - When you ask a question, retrieves the most relevant chunks
+- Passes those chunks to a local LLM (llama3.2 via Ollama) to generate an answer with relevant context from the content it indexed
+- Answers are grounded in your actual documents, rather than generic knowledge or guesswork
 
 ## Requirements
 
@@ -55,14 +56,4 @@ You: How do I add a new Docker container?
 Answer: ...
 
 You: exit
-```
-
-## Project structure
-
-```
-├── scraper.py      # Fetches and chunks docs from a URL or local file
-├── embeddings.py   # Indexes chunks into ChromaDB and handles retrieval
-├── agent.py        # Builds the prompt and calls the LLM
-├── homelab.md      # Your personal homelab notes (not committed)
-└── .env            # API keys if using a remote LLM (not committed)
 ```
