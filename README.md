@@ -1,6 +1,6 @@
 # Homelab AI Agent
 
-A local RAG-powered assistant that answers questions about your homelab setup. Feed it your own markdown notes and config files, point it at external docs, and ask it questions — it answers based on what's actually in your docs, not guesswork.
+A local AI powered assistant that answers questions about your homelab setup. Feed it your own markdown notes and config files, point it at external docs, and ask it questions — it answers based on what's actually in your docs, not guesswork.
 
 Runs entirely on your machine using Ollama. No API costs, no internet required once set up.
 
@@ -8,8 +8,8 @@ Runs entirely on your machine using Ollama. No API costs, no internet required o
 
 - Reads local markdown/text files or scrapes docs from a URL
 - Chunks and indexes the content into a local vector database (ChromaDB)
+- Passes those chunks to a local LLM (llama3.2 via Ollama) to generate an answer with the context of the contents it is fed
 - When you ask a question, retrieves the most relevant chunks
-- Passes those chunks to a local LLM (llama3.2 via Ollama) to generate a grounded answer
 
 ## Requirements
 
