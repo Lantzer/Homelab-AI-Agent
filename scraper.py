@@ -5,59 +5,66 @@ Goal: Given a URL, return clean, readable text we can later
 split into chunks and feed to an AI model.
 """
 
+import io
 import requests
 import sys
+import pdfplumber
 from bs4 import BeautifulSoup
 
 
 def fetch_docs(url: str) -> str:
     """
-    Fetch a documentation page and return clean text.
-    
-    Steps:
-    1. Download the raw HTML
-    2. Parse it with BeautifulSoup
-    3. Remove noise (nav, scripts, footers)
-    4. Return just the meaningful text
+    Fetch a documentation page or PDF from a URL and return clean text.
     """
     print(f"Fetching: {url}")
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; DocAgent/1.0)"
-    }
+
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; DocAgent/1.0)"}
     response = requests.get(url, headers=headers, timeout=10)
-    response.raise_for_status()  # Throw if 4xx/5xx
+    response.raise_for_status()
 
-    # Parse the HTML
-    soup = BeautifulSoup(response.text, "html.parser")
+    content_type = response.headers.get("Content-Type", "")
+    is_pdf = "application/pdf" in content_type or url.split("?")[0].lower().endswith(".pdf")
 
-    # Remove noise tags — nav menus, scripts, styles, footers
-    # These add tokens but carry no useful doc content
-    for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
-        tag.decompose()
+    if is_pdf:
+        text = _extract_pdf_text(io.BytesIO(response.content))
+    else:
+        soup = BeautifulSoup(response.text, "html.parser")
+        for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+            tag.decompose()
+        main = soup.find("main") or soup.find("article") or soup.find("body")
+        raw = main.get_text(separator="\n")
+        lines = [line.strip() for line in raw.splitlines() if line.strip()]
+        text = "\n".join(lines)
 
-    # Get the main content area if it exists, otherwise fall back to body
-    main = soup.find("main") or soup.find("article") or soup.find("body")
-
-    # Extract text, collapsing whitespace
-    text = main.get_text(separator="\n")
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    clean_text = "\n".join(lines)
-
-    print(f"  Fetched {len(clean_text)} characters")
-    return clean_text
+    print(f"  Fetched {len(text)} characters")
+    return text
 
 def read_local_file(filepath: str) -> str:
     """
-    Read a local markdown or text file and return its contents.
+    Read a local file and return its contents as text.
+    Supports .pdf, .md, and plain text files.
     """
     print(f"Reading: {filepath}")
-    
-    with open(filepath, "r", encoding="utf-8") as f:
-        text = f.read()
-    
+
+    if filepath.lower().endswith(".pdf"):
+        with open(filepath, "rb") as f:
+            text = _extract_pdf_text(f)
+    else:
+        with open(filepath, "r", encoding="utf-8") as f:
+            text = f.read()
+
     print(f"  Read {len(text)} characters")
     return text
+
+
+def _extract_pdf_text(file_obj) -> str:
+    pages = []
+    with pdfplumber.open(file_obj) as pdf:
+        for page in pdf.pages:
+            page_text = page.extract_text()
+            if page_text:
+                pages.append(page_text)
+    return "\n\n".join(pages)
 
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> list[str]:
     """

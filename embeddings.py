@@ -13,8 +13,35 @@ How it works:
 """
 
 import sys
+import json
+import os
+import shutil
 import chromadb
 from scraper import fetch_docs, read_local_file, chunk_text
+
+SOURCES_FILE = "./sources.json"
+
+
+def save_source(source: str):
+    sources = get_sources()
+    if source not in sources:
+        sources.append(source)
+        with open(SOURCES_FILE, "w") as f:
+            json.dump(sources, f)
+
+
+def get_sources() -> list[str]:
+    if not os.path.exists(SOURCES_FILE):
+        return []
+    with open(SOURCES_FILE) as f:
+        return json.load(f)
+
+
+def delete_index():
+    if os.path.exists("./chroma_db"):
+        shutil.rmtree("./chroma_db")
+    if os.path.exists(SOURCES_FILE):
+        os.remove(SOURCES_FILE)
 
 
 def ingest(source: str, collection_name: str = "doc") -> int:
@@ -29,6 +56,7 @@ def ingest(source: str, collection_name: str = "doc") -> int:
 
     chunks = chunk_text(text)
     build_index(chunks, collection_name=collection_name)
+    save_source(source)
     return len(chunks)
 
 

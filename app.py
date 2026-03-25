@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, render_template
 from chromadb.errors import NotFoundError
 from agent import ask, build_prompt
-from embeddings import load_index, ingest
+from embeddings import load_index, ingest, get_sources, delete_index
 
 app = Flask(__name__)
 
@@ -57,6 +57,22 @@ def ingest_document():
         return jsonify({"error": f"File not found: {source}"}), 400
     except Exception as e:
         return jsonify({"error": f"Ingestion failed: {e}"}), 500
+
+
+@app.route("/sources", methods=["GET"])
+def list_sources():
+    return jsonify({"sources": get_sources()})
+
+
+@app.route("/reset", methods=["POST"])
+def reset_index():
+    global collection
+    try:
+        delete_index()
+        collection = None
+        return jsonify({"message": "Index deleted. Ready for fresh ingestion."})
+    except Exception as e:
+        return jsonify({"error": f"Failed to delete index: {e}"}), 500
 
 
 if __name__ == "__main__":
