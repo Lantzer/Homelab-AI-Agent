@@ -275,8 +275,14 @@
           status.className = "error";
         } else {
           status.textContent = data.message;
-          status.className = "success";
+          status.className = data.failed && data.failed.length > 0 ? "error" : "success";
           input.value = "";
+          loadSources();
+
+          if (data.failed && data.failed.length > 0) {
+            const failList = data.failed.map(f => `• ${f.source}: ${f.error}`).join("\n");
+            status.textContent += `\n\nFailed:\n${failList}`;
+          }
         }
       } catch (e) {
         status.textContent = "Failed to reach the server.";
@@ -335,13 +341,6 @@
     document.getElementById("source-input").addEventListener("keydown", e => {
       if (e.key === "Enter") ingestDocument();
     });
-
-    // Update sources list after a successful ingest
-    const origIngest = ingestDocument;
-    ingestDocument = async function() {
-      await origIngest();
-      loadSources();
-    };
 
     loadSources();
   </script>

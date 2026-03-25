@@ -62,19 +62,14 @@ def ingest(source: str, collection_name: str = "doc") -> int:
 
 def build_index(chunks: list[str], collection_name: str = "doc") -> chromadb.Collection:
     client = chromadb.PersistentClient(path="./chroma_db")
-
-    # Get existing collection or create a new one
     collection = client.get_or_create_collection(name=collection_name)
 
-    # Only add chucnks if the collection is empty
-    if collection.count() == 0:
-        collection.add(
-                documents=chunks,
-                    ids=[f"chunk_{i}" for i in range(len(chunks))]
-        )
-        print(f"Indexed {len(chunks)} chunks into ChromaDB")
-    else:
-        print(f"Loaded existing index ({collection.count()} chunks)")
+    offset = collection.count()
+    collection.add(
+        documents=chunks,
+        ids=[f"chunk_{offset + i}" for i in range(len(chunks))]
+    )
+    print(f"Indexed {len(chunks)} chunks (collection now has {collection.count()} total)")
 
     return collection
 

@@ -49,14 +49,50 @@ def ingest_document():
     if not source:
         return jsonify({"error": "Source cannot be empty."}), 400
 
+    if source.endswith(".txt"):
+        return ingest_list(source)
+
     try:
         count = ingest(source)
-        collection = load_index()  # Refresh collection after ingestion
+        collection = load_index()
         return jsonify({"message": f"Successfully ingested {count} chunks from: {source}"})
     except FileNotFoundError:
         return jsonify({"error": f"File not found: {source}"}), 400
     except Exception as e:
         return jsonify({"error": f"Ingestion failed: {e}"}), 500
+
+
+def ingest_list(filepath: str):
+    global collection
+
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            sources = [line.strip() for line in f if line.strip()]
+    except FileNotFoundError:
+        return jsonify({"error": f"File not found: {filepath}"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Could not read file: {e}"}), 500
+
+    if not sources:
+        return jsonify({"error": "File is empty."}), 400
+
+    succeeded, failed = [], []
+
+    for src in sources:
+        try:
+            ingest(src)
+            succeeded.append(src)
+        except Exception as e:
+            failed.append({"source": src, "error": str(e)})
+
+    if succeeded:
+        collection = load_index()
+
+    return jsonify({
+        "message": f"Ingested {len(succeeded)} of {len(sources)} sources.",
+        "succeeded": succeeded,
+        "failed": failed
+    })
 
 
 @app.route("/sources", methods=["GET"])
