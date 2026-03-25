@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Homelab AI Agent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 2rem;
+      color: #7dd3fc;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 720px;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    .card {
+      background: #1e2130;
+      border: 1px solid #2d3148;
+      border-radius: 10px;
+      padding: 1.5rem;
+    }
+
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Chat */
+    #chat-log {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      max-height: 400px;
+      overflow-y: auto;
+      margin-bottom: 1rem;
+      padding-right: 0.25rem;
+    }
+
+    .message {
+      padding: 0.6rem 0.9rem;
+      border-radius: 8px;
+      line-height: 1.5;
+      font-size: 0.925rem;
+      max-width: 90%;
+      white-space: pre-wrap;
+    }
+
+    .message.user {
+      background: #1d4ed8;
+      align-self: flex-end;
+    }
+
+    .message.agent {
+      background: #1e293b;
+      border: 1px solid #334155;
+      align-self: flex-start;
+    }
+
+    .message.error {
+      background: #3b1a1a;
+      border: 1px solid #7f1d1d;
+      color: #fca5a5;
+      align-self: flex-start;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      color: #e2e8f0;
+      border-radius: 6px;
+      padding: 0.55rem 0.8rem;
+      font-size: 0.925rem;
+      outline: none;
+    }
+
+    input[type="text"]:focus {
+      border-color: #7dd3fc;
+    }
+
+    button {
+      background: #1d4ed8;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 0.55rem 1.1rem;
+      font-size: 0.925rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    button:hover { background: #2563eb; }
+    button:disabled { background: #334155; cursor: not-allowed; }
+
+    /* Ingest */
+    .ingest-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    #ingest-status {
+      font-size: 0.875rem;
+      min-height: 1.25rem;
+    }
+
+    #ingest-status.success { color: #86efac; }
+    #ingest-status.error   { color: #fca5a5; }
+  </style>
+</head>
+<body>
+  <h1>Homelab AI Agent</h1>
+
+  <div class="container">
+
+    <!-- Chat -->
+    <div class="card">
+      <h2>Ask a Question</h2>
+      <div id="chat-log"></div>
+      <div class="input-row">
+        <input id="question-input" type="text" placeholder="Ask about your homelab docs..." />
+        <button id="ask-btn" onclick="askQuestion()">Ask</button>
+      </div>
+    </div>
+
+    <!-- Ingest -->
+    <div class="card">
+      <h2>Add Document</h2>
+      <div class="ingest-row">
+        <input id="source-input" type="text" placeholder="File path or URL (e.g. ./docs/setup.md)" />
+        <button id="ingest-btn" onclick="ingestDocument()">Add</button>
+      </div>
+      <div id="ingest-status"></div>
+    </div>
+
+  </div>
+
+  <script>
+    const chatLog = document.getElementById("chat-log");
+
+    function appendMessage(text, type) {
+      const el = document.createElement("div");
+      el.className = `message ${type}`;
+      el.textContent = text;
+      chatLog.appendChild(el);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    async function askQuestion() {
+      const input = document.getElementById("question-input");
+      const btn = document.getElementById("ask-btn");
+      const question = input.value.trim();
+      if (!question) return;
+
+      appendMessage(question, "user");
+      input.value = "";
+      btn.disabled = true;
+
+      try {
+        const res = await fetch("/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question })
+        });
+        const data = await res.json();
+        if (data.error) {
+          appendMessage(data.error, "error");
+        } else {
+          appendMessage(data.answer, "agent");
+        }
+      } catch (e) {
+        appendMessage("Failed to reach the server.", "error");
+      } finally {
+        btn.disabled = false;
+        input.focus();
+      }
+    }
+
+    async function ingestDocument() {
+      const input = document.getElementById("source-input");
+      const btn = document.getElementById("ingest-btn");
+      const status = document.getElementById("ingest-status");
+      const source = input.value.trim();
+      if (!source) return;
+
+      btn.disabled = true;
+      status.textContent = "Ingesting...";
+      status.className = "";
+
+      try {
+        const res = await fetch("/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source })
+        });
+        const data = await res.json();
+        if (data.error) {
+          status.textContent = data.error;
+          status.className = "error";
+        } else {
+          status.textContent = data.message;
+          status.className = "success";
+          input.value = "";
+        }
+      } catch (e) {
+        status.textContent = "Failed to reach the server.";
+        status.className = "error";
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById("question-input").addEventListener("keydown", e => {
+      if (e.key === "Enter") askQuestion();
+    });
+
+    document.getElementById("source-input").addEventListener("keydown", e => {
+      if (e.key === "Enter") ingestDocument();
+    });
+  </script>
+</body>
+</html>

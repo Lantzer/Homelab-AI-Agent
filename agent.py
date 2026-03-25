@@ -1,28 +1,24 @@
 """
-Layer 3: The LLM Call
+Agent: Prompt Builder and Query Layer
 
-Goal: Take the relevant chunks from Layer 2 and use them as context
-for Ollama to answer the user's question, grounded in the actual docs.
+Handles querying the ChromaDB index and generating answers via Ollama.
+Documents are added to the index separately via ingest.py.
 """
 
-import os
-import sys
 import ollama
-from embeddings import load_index, query_index, build_index
-from scraper import fetch_docs, chunk_text, read_local_file
+from chromadb.errors import NotFoundError
+from embeddings import load_index, query_index
+
 
 def build_prompt(question: str, chunks: list[str]) -> str:
-    """
-    Combine the retrieved chunks and the user's question into a prompt.
-    The chunks act as Ollama's only source of truth.
-    """
     context = ""
     for i, chunk in enumerate(chunks):
         context += f"--- chunk {i+1} ---\n{chunk}\n\n"
 
-    return f"""You are a helpful homelab assistant. Answer the user's question 
-based only on the documentation provided below. If the answer isn't in the 
-documentation, say so — do not guess or make things up.
+    return f"""You are a helpful homelab assistant. Answer the user's question
+based only on the documentation provided below. If the answer isn't in the
+documentation, say so — do not guess or make things up. If outside information is
+needed, state what it is.
 
 DOCUMENTATION:
 {context}
@@ -32,50 +28,35 @@ QUESTION:
 
 
 def ask(question: str, collection) -> str:
-    """
-    Full RAG pipeline:
-    1. Retrieve relevant chunks from ChromaDB
-    2. Build a prompt with those chunks as context
-    3. Send to Ollama and return the answer
-    """
-    # Layer 2 — retrieve relevant chunks
     chunks = query_index(collection, question)
 
-    # Build the grounded prompt
+    if not chunks:
+        return "No relevant documents found. Try adding documents via the ingest process."
+
     prompt = build_prompt(question, chunks)
 
-    # Layer 3 — Using Ollama
-    
-    response = ollama.chat(
-        model="llama3.2",
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    return response["message"]["content"]
+    # Handle errors per question
+    try:
+        response = ollama.chat(
+            model="llama3.2",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response["message"]["content"]
+    except ollama.ResponseError as e:
+        return f"Ollama error: {e}"
+    except Exception as e:
+        return f"Unexpected error contacting Ollama: {e}"
 
 
 if __name__ == "__main__":
-    # If chroma_db folder exists, load it — otherwise index from source
-    if os.path.exists("./chroma_db"):
-        print("Loading existing index...")
+    try:
         collection = load_index()
-    else:
-        if len(sys.argv) < 2:
-            print("Usage: python agent.py <filepath or url>")
-            sys.exit(1)
-
-        source = sys.argv[1]
-
-        if source.startswith("http"):
-            text = fetch_docs(source)
-        else:
-            text = read_local_file(source)
-
-        chunks = chunk_text(text)
-        print("Indexing chunks...")
-        collection = build_index(chunks)
+    except NotFoundError:
+        print("Error: No documents indexed yet. Run ingest.py first.")
+        raise SystemExit(1)
+    except Exception as e:
+        print(f"Error loading index: {e}")
+        raise SystemExit(1)
 
     print("\nReady! Ask questions about your docs. Type 'exit' to quit.\n")
     while True:
