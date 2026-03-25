@@ -8,7 +8,7 @@ for Ollama to answer the user's question, grounded in the actual docs.
 import os
 import sys
 import ollama
-from embeddings import build_index, query_index
+from embeddings import load_index, query_index, build_index
 from scraper import fetch_docs, chunk_text, read_local_file
 
 def build_prompt(question: str, chunks: list[str]) -> str:
@@ -57,26 +57,26 @@ def ask(question: str, collection) -> str:
 
 
 if __name__ == "__main__":
-
-    if len(sys.argv) < 2:
-        print("Usage: python agent.py <filepath or url>")
-        sys.exit(1)
-
-    source = sys.argv[1]
-
-    # Load and chunk the source
-    if source.startswith("http"):
-        text = fetch_docs(source)
+    # If chroma_db folder exists, load it — otherwise index from source
+    if os.path.exists("./chroma_db"):
+        print("Loading existing index...")
+        collection = load_index()
     else:
-        text = read_local_file(source)
+        if len(sys.argv) < 2:
+            print("Usage: python agent.py <filepath or url>")
+            sys.exit(1)
 
-    chunks = chunk_text(text)
+        source = sys.argv[1]
 
-    # Build the index
-    print("Indexing chunks...")
-    collection = build_index(chunks)
+        if source.startswith("http"):
+            text = fetch_docs(source)
+        else:
+            text = read_local_file(source)
 
-    # Ask questions in a loop
+        chunks = chunk_text(text)
+        print("Indexing chunks...")
+        collection = build_index(chunks)
+
     print("\nReady! Ask questions about your docs. Type 'exit' to quit.\n")
     while True:
         question = input("You: ")

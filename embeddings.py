@@ -14,25 +14,28 @@ How it works:
 
 import chromadb
 
-def build_index(chunks: list[str], collection_name: str = "api_docs") -> chromadb.Collection:
-    """
-    Take text chunks and store them in ChromaDB.
-    ChromaDB automatically handles the embedding (vectorizing) for us.
-    """
-    # Creates a local ChromaDB instance — stores data in memory for now
-    client = chromadb.EphemeralClient()
 
-    # A collection is like a table — holds all chunks for one docs site
-    collection = client.create_collection(name=collection_name)
+def build_index(chunks: list[str], collection_name: str = "doc") -> chromadb.Collection:
+    client = chromadb.PersistentClient(path="./chroma_db")
 
-    # Add all chunks — ChromaDB embeds them automatically
-    collection.add(
-        documents=chunks,
-        ids=[f"chunk_{i}" for i in range(len(chunks))]  # each chunk needs a unique ID
-    )
+    # Get existing collection or create a new one
+    collection = client.get_or_create_collection(name=collection_name)
 
-    print(f"Indexed {len(chunks)} chunks into ChromaDB")
+    # Only add chucnks if the collection is empty
+    if collection.count() == 0:
+        collection.add(
+                documents=chunks,
+                    ids=[f"chunk_{i}" for i in range(len(chunks))]
+        )
+        print(f"Indexed {len(chunks)} chunks into ChromaDB")
+    else:
+        print(f"Loaded existing index ({collection.count()} chunks)")
+
     return collection
+
+def load_index(collection_name: str = "doc") -> chromadb.Collection:
+    client = chromadb.PersistentClient(path="./chroma_db")
+    return client.get_collection(name=collection_name)
 
 
 def query_index(collection: chromadb.Collection, question: str, n_results: int = 3) -> list[str]:
