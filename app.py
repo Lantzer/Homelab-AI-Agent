@@ -1,9 +1,9 @@
 from flask import Flask, request, jsonify, render_template
 from chromadb.errors import NotFoundError
-from agent import ask, build_prompt
-from embeddings import load_index, ingest, get_sources, delete_index
+from Core.agent import ask, build_prompt
+from Core.embeddings import load_index, ingest, get_sources, delete_index
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="web/templates", static_folder="web/assets")
 
 # Load or lazily initialize the collection
 collection = None

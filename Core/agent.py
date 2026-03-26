@@ -7,7 +7,7 @@ Documents are added to the index separately via ingest.py.
 
 import ollama
 from chromadb.errors import NotFoundError
-from embeddings import load_index, query_index
+from Core.embeddings import load_index, query_index
 
 
 def build_prompt(question: str, chunks: list[str]) -> str:

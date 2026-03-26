@@ -17,9 +17,9 @@ import json
 import os
 import shutil
 import chromadb
-from scraper import fetch_docs, read_local_file, chunk_text
+from Core.scraper import fetch_docs, read_local_file, chunk_text
 
-SOURCES_FILE = "./sources.json"
+SOURCES_FILE = "./data/sources.json"
 
 
 def save_source(source: str):
@@ -38,8 +38,8 @@ def get_sources() -> list[str]:
 
 
 def delete_index():
-    if os.path.exists("./chroma_db"):
-        shutil.rmtree("./chroma_db")
+    if os.path.exists("./data/chroma_db"):
+        shutil.rmtree("./data/chroma_db")
     if os.path.exists(SOURCES_FILE):
         os.remove(SOURCES_FILE)
 
@@ -61,7 +61,7 @@ def ingest(source: str, collection_name: str = "doc") -> int:
 
 
 def build_index(chunks: list[str], collection_name: str = "doc") -> chromadb.Collection:
-    client = chromadb.PersistentClient(path="./chroma_db")
+    client = chromadb.PersistentClient(path="./data/chroma_db")
     collection = client.get_or_create_collection(name=collection_name)
 
     offset = collection.count()
@@ -74,7 +74,7 @@ def build_index(chunks: list[str], collection_name: str = "doc") -> chromadb.Col
     return collection
 
 def load_index(collection_name: str = "doc") -> chromadb.Collection:
-    client = chromadb.PersistentClient(path="./chroma_db")
+    client = chromadb.PersistentClient(path="./data/chroma_db")
     return client.get_collection(name=collection_name)
 
 

@@ -1,6 +1,5 @@
 .env
-chroma_db/
+data/
 __pycache__/
 **/__pycache__/
 *.pyc
-sources.json
