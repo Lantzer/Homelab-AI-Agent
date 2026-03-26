@@ -4,6 +4,7 @@ A local AI powered assistant that answers questions about your homelab setup. Fe
 
 Runs entirely on your machine using Ollama. No API costs, no internet required once set up.
 
+![Website Screenshot](web/assets/website_screenshot.png)
 ## What it does
 
 - Ingests local markdown, text, and PDF files, or scrapes content from a URL
@@ -34,7 +35,7 @@ Pull the model if you haven't already:
 ollama pull llama3.2
 ```
 
-## Web UI
+## Start Application
 
 Start the Flask server:
 
