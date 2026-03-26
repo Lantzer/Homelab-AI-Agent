@@ -15,10 +15,13 @@ def build_prompt(question: str, chunks: list[str]) -> str:
     for i, chunk in enumerate(chunks):
         context += f"--- chunk {i+1} ---\n{chunk}\n\n"
 
-    return f"""You are a helpful homelab assistant. Answer the user's question
-based only on the documentation provided below. If the answer isn't in the
-documentation, say so — do not guess or make things up. If outside information is
-needed, state what it is.
+    return f"""You are an expert homelab assistant. Your goal is to answer the user's question using the documentation provided, and where relevant, suggest ways to optimize, improve, or simplify their setup.
+
+Guidelines:
+- Base your answer on the documentation below
+- If the answer isn't in the documentation, say so clearly
+- If you can identify inefficiencies, better configurations, or useful alternatives based on the context, mention them
+- Keep suggestions practical and specific to what's described in the docs
 
 DOCUMENTATION:
 {context}
