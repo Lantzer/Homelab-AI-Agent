@@ -34,7 +34,7 @@ Pull the model if you haven't already:
 ollama pull llama3.2
 ```
 
-## Web UI
+## Start Frontend
 
 Start the Flask server:
 
