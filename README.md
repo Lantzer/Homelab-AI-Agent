@@ -26,7 +26,7 @@ Clone the repo and install dependencies:
 ```bash
 git clone https://github.com/yourusername/homelab-ai-agent.git
 cd homelab-ai-agent
-pip install requests beautifulsoup4 chromadb ollama flask pdfplumber
+pip install requests beautifulsoup4 chromadb ollama flask pdfplumber werkzeug
 ```
 
 Pull the model if you haven't already:

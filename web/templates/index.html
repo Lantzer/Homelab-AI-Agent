@@ -177,6 +177,66 @@
     }
 
     button.danger:hover { background: #991b1b; }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 2px dashed #2d3148;
+      border-radius: 8px;
+      padding: 1.25rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      margin-bottom: 0.75rem;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.drag-over {
+      border-color: #7dd3fc;
+      background: #151929;
+    }
+
+    .drop-zone p {
+      color: #475569;
+      font-size: 0.875rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .drop-zone .file-types {
+      font-size: 0.775rem;
+      color: #334155;
+      margin-bottom: 0.6rem;
+    }
+
+    .drop-zone .browse-btn {
+      background: transparent;
+      border: 1px solid #2d3148;
+      color: #94a3b8;
+      font-size: 0.8rem;
+      padding: 0.35rem 0.85rem;
+    }
+
+    .drop-zone .browse-btn:hover {
+      border-color: #7dd3fc;
+      color: #7dd3fc;
+      background: transparent;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+      color: #334155;
+      font-size: 0.8rem;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: #2d3148;
+    }
   </style>
 </head>
 <body>
@@ -200,8 +260,20 @@
         <h2>Add Document</h2>
         <button class="danger" onclick="resetIndex()">Delete Index</button>
       </div>
+      <!-- Drop zone — click anywhere or use Browse button to open file picker -->
+      <div class="drop-zone" id="drop-zone">
+        <p>Drag &amp; drop a file here</p>
+        <p class="file-types">.md &nbsp;·&nbsp; .txt &nbsp;·&nbsp; .pdf &nbsp;·&nbsp; max 50 MB</p>
+        <button class="browse-btn" id="browse-btn">Browse</button>
+        <!-- Hidden input — accept attribute is a first-pass client-side filter,
+             not a security boundary. Server validates independently. -->
+        <input type="file" id="file-input" accept=".md,.txt,.pdf" style="display:none" />
+      </div>
+
+      <div class="divider">or enter a URL</div>
+
       <div class="ingest-row">
-        <input id="source-input" type="text" placeholder="File path or URL (e.g. ./docs/setup.md)" />
+        <input id="source-input" type="text" placeholder="https://docs.example.com/setup" />
         <button id="ingest-btn" onclick="ingestDocument()">Add</button>
       </div>
       <div id="ingest-status"></div>
@@ -340,6 +412,99 @@
 
     document.getElementById("source-input").addEventListener("keydown", e => {
       if (e.key === "Enter") ingestDocument();
+    });
+
+    // ── File upload (drag-and-drop + Browse button) ──────────────────────────
+
+    // Mirrors the server-side allowlist — client-side check fails fast before
+    // a round trip, but is NOT the security boundary (server validates independently).
+    const ALLOWED_EXTS = new Set([".md", ".txt", ".pdf"]);
+    const MAX_BYTES = 50 * 1024 * 1024; // Must match MAX_CONTENT_LENGTH on the server
+
+    function getExt(filename) {
+      const idx = filename.lastIndexOf(".");
+      return idx === -1 ? "" : filename.slice(idx).toLowerCase();
+    }
+
+    function clientValidate(file) {
+      // Extension check — catch obvious rejections before touching the network
+      if (!ALLOWED_EXTS.has(getExt(file.name))) {
+        return `Unsupported file type: ${getExt(file.name)}. Allowed: .md, .txt, .pdf`;
+      }
+      // Size check — avoids sending a payload the server will reject via 413
+      if (file.size > MAX_BYTES) {
+        return `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max: 50 MB`;
+      }
+      return null;
+    }
+
+    async function uploadFile(file) {
+      const status = document.getElementById("ingest-status");
+
+      const err = clientValidate(file);
+      if (err) {
+        status.textContent = err;
+        status.className = "error";
+        return;
+      }
+
+      status.textContent = `Uploading ${file.name}...`;
+      status.className = "";
+
+      // FormData sends as multipart/form-data — file bytes only, no local path exposed
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await fetch("/upload", { method: "POST", body: formData });
+        const data = await res.json();
+        if (data.error) {
+          status.textContent = data.error;
+          status.className = "error";
+        } else {
+          status.textContent = data.message;
+          status.className = "success";
+          loadSources();
+        }
+      } catch (e) {
+        status.textContent = "Failed to reach the server.";
+        status.className = "error";
+      }
+    }
+
+    const dropZone = document.getElementById("drop-zone");
+    const fileInput = document.getElementById("file-input");
+
+    // Browse button and drop zone click both trigger the hidden file input
+    document.getElementById("browse-btn").addEventListener("click", e => {
+      e.stopPropagation(); // Prevent double-trigger from drop zone click listener
+      fileInput.click();
+    });
+
+    dropZone.addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", e => {
+      if (e.target.files[0]) uploadFile(e.target.files[0]);
+      e.target.value = ""; // Reset so the same file can be re-selected
+    });
+
+    dropZone.addEventListener("dragover", e => {
+      e.preventDefault(); // Required — without this the drop event won't fire
+      dropZone.classList.add("drag-over");
+    });
+
+    dropZone.addEventListener("dragleave", e => {
+      // Only remove highlight when leaving the zone itself, not a child element
+      if (!dropZone.contains(e.relatedTarget)) {
+        dropZone.classList.remove("drag-over");
+      }
+    });
+
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropZone.classList.remove("drag-over");
+      const file = e.dataTransfer.files[0];
+      if (file) uploadFile(file);
     });
 
     loadSources();
