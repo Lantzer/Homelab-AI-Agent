@@ -1,23 +1,33 @@
 # Homelab AI Agent
 
-A local AI powered assistant that answers questions about your homelab setup. Feed it your own markdown notes, config files, PDFs, or URLs — it answers based on what's actually in your docs, not guesswork.
+A personal project built for two reasons: to have a useful AI assistant for my own homelab setup, and to learn more about how LLMs work in practice — routing, retrieval, tool use, and conversation memory.
 
-Runs entirely on your machine using Ollama. No API costs, no internet required once set up.
+The agent can answer questions about my specific homelab by searching my own documentation, look up general product information from manuals and guides I've indexed, search the web via Tavily when needed, and suggest commands I can run directly.
+
+Runs entirely on your machine using [Ollama](https://ollama.com) for local LLM inference. No API costs, no data leaving your network.
 
 ![Website Screenshot](web/assets/website_screenshot.png)
-## What it does
 
-- Ingests local markdown, text, and PDF files, or scrapes content from a URL
-- Accepts a `.txt` file containing a list of sources (one per line) to batch ingest
-- Chunks and indexes content into a persistent local vector database (ChromaDB)
-- When you ask a question, retrieves the most relevant chunks
-- Passes those chunks to a local LLM (llama3.2 via Ollama) to generate a grounded answer
-- Serves a web UI for chatting with the agent and managing the index
+## How it works
+
+1. Documents are chunked and indexed into a persistent local vector database (ChromaDB)
+2. When a question is asked, a router LLM call decides which tools to use
+3. The selected tools retrieve relevant context (local docs, web search, or both)
+4. A second LLM call generates an answer grounded in that context
+5. Conversation history is maintained so follow-up questions work naturally
+
+## Two document collections
+
+- **Homelab** — personal documentation specific to my setup (hardware, services, configs, IPs)
+- **Supporting** — general reference material (product manuals, software guides, external docs)
+
+The agent keeps these separate so it knows what's my actual setup vs. general knowledge.
 
 ## Requirements
 
 - Python 3.10+
 - [Ollama](https://ollama.com) installed and running with `llama3.2` pulled
+- A [Tavily](https://tavily.com) API key for web search
 
 ## Installation
 
@@ -26,18 +36,22 @@ Clone the repo and install dependencies:
 ```bash
 git clone https://github.com/yourusername/homelab-ai-agent.git
 cd homelab-ai-agent
-pip install requests beautifulsoup4 chromadb ollama flask pdfplumber
+pip install requests beautifulsoup4 chromadb ollama flask pdfplumber python-dotenv tavily-python
 ```
 
-Pull the model if you haven't already:
+Pull the model:
 
 ```bash
 ollama pull llama3.2
 ```
 
-## Start Application
+Create a `.env` file in the project root:
 
-Start the Flask server:
+```
+TAVILY_API_KEY=your_key_here
+```
+
+## Start Application
 
 ```bash
 python app.py
@@ -45,13 +59,17 @@ python app.py
 
 Then open `http://localhost:5000` in your browser.
 
+## Usage
+
 ### Ask a Question
 
-Type any question into the chat input. The agent retrieves the most relevant chunks from your indexed documents and answers based on them.
+Type any question into the chat. The agent routes it to the appropriate tools, retrieves context, and answers based on what it finds. Tool badges on each response show which sources were used. If a command is suggested, it appears in a copyable block with the agent's reasoning.
+
+Use **New Conversation** to clear the chat history and start fresh.
 
 ### Add Document
 
-Enter a file path or URL to ingest a document into the index. Supported sources:
+Enter a file path or URL and select which collection to add it to. Supported sources:
 
 | Type | Example |
 |---|---|
@@ -61,24 +79,24 @@ Enter a file path or URL to ingest a document into the index. Supported sources:
 | PDF URL | `https://example.com/manual.pdf` |
 | Batch list (`.txt`) | `./sources.txt` |
 
-**Batch ingestion:** Create a `.txt` file with one source per line (file paths or URLs). Entering this file in the Add Document field will ingest each item individually. Failures are reported per-item without stopping the rest.
+**Batch ingestion:** Create a `.txt` file with one source per line. Entering it in the Add Document field ingests each item individually. Failures are reported per-item without stopping the rest.
 
 ```
 ./homelab.md
 https://tailscale.com/kb/
 ./proxmox-guide.pdf
-https://docs.docker.com/get-started/
 ```
 
-### Delete Index
+### Managing the Index
 
-Click **Delete Index** to wipe the ChromaDB database and sources list, allowing you to start fresh.
+- Use the **Homelab Docs / Supporting Docs** tabs to see what's indexed in each collection
+- **Delete Index** wipes everything and resets both collections
 
 ## Command Line
 
-Documents can also be ingested directly without the web UI:
+Documents can also be ingested directly:
 
 ```bash
-python embeddings.py ./homelab.md
-python embeddings.py https://docs.home-assistant.io/
+python Core/embeddings.py ./homelab.md homelab
+python Core/embeddings.py https://docs.home-assistant.io/ supporting
 ```
