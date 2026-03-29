@@ -10,6 +10,10 @@ How it works:
   - Similar text = similar vectors = close together in vector space
   - When you ask a question, we convert it to a vector too,
     then find the chunks with the closest vectors
+
+Collections:
+  homelab   — the user's personal homelab documentation
+  supporting — general product manuals, guides, and reference docs
 """
 
 import sys
@@ -19,32 +23,66 @@ import shutil
 import chromadb
 from Core.scraper import fetch_docs, read_local_file, chunk_text
 
-SOURCES_FILE = "./data/sources.json"
+HOMELAB_COLLECTION = "homelab"
+SUPPORTING_COLLECTION = "supporting"
 
 
-def save_source(source: str):
-    sources = get_sources()
+def _sources_file(collection_name: str) -> str:
+    return f"./data/sources_{collection_name}.json"
+
+
+def save_source(source: str, collection_name: str = HOMELAB_COLLECTION):
+    sources = get_sources(collection_name)
     if source not in sources:
         sources.append(source)
-        with open(SOURCES_FILE, "w") as f:
+        with open(_sources_file(collection_name), "w") as f:
             json.dump(sources, f)
 
 
-def get_sources() -> list[str]:
-    if not os.path.exists(SOURCES_FILE):
+def get_sources(collection_name: str = HOMELAB_COLLECTION) -> list[str]:
+    path = _sources_file(collection_name)
+    if not os.path.exists(path):
         return []
-    with open(SOURCES_FILE) as f:
+    with open(path) as f:
         return json.load(f)
 
 
-def delete_index():
-    if os.path.exists("./data/chroma_db"):
-        shutil.rmtree("./data/chroma_db")
-    if os.path.exists(SOURCES_FILE):
-        os.remove(SOURCES_FILE)
+def init_collections():
+    """Ensure both homelab and supporting collections exist on startup."""
+    client = chromadb.PersistentClient(path="./data/chroma_db")
+    for name in (HOMELAB_COLLECTION, SUPPORTING_COLLECTION):
+        client.get_or_create_collection(name=name)
+        print(f"Collection '{name}' ready.")
 
 
-def ingest(source: str, collection_name: str = "doc") -> int:
+def delete_index(collection_name: str = None):
+    """
+    Delete a specific collection or the entire index.
+    If collection_name is None, deletes all of ./data/chroma_db and all sources files.
+    """
+    if collection_name is None:
+        if os.path.exists("./data/chroma_db"):
+            shutil.rmtree("./data/chroma_db")
+        # Remove all per-collection sources files
+        for name in (HOMELAB_COLLECTION, SUPPORTING_COLLECTION, "doc"):
+            path = _sources_file(name)
+            if os.path.exists(path):
+                os.remove(path)
+        # Remove legacy sources file
+        if os.path.exists("./data/sources.json"):
+            os.remove("./data/sources.json")
+    else:
+        try:
+            client = chromadb.PersistentClient(path="./data/chroma_db")
+            client.delete_collection(name=collection_name)
+        except Exception:
+            pass
+        path = _sources_file(collection_name)
+        if os.path.exists(path):
+            os.remove(path)
+
+
+def ingest(source: str, collection_name: str = HOMELAB_COLLECTION) -> int:
     """
     Ingest a document from a URL or local file path into ChromaDB.
     Returns the number of chunks added.
@@ -56,11 +94,11 @@ def ingest(source: str, collection_name: str = "doc") -> int:
 
     chunks = chunk_text(text)
     build_index(chunks, collection_name=collection_name)
-    save_source(source)
+    save_source(source, collection_name)
     return len(chunks)
 
 
-def build_index(chunks: list[str], collection_name: str = "doc") -> chromadb.Collection:
+def build_index(chunks: list[str], collection_name: str = HOMELAB_COLLECTION) -> chromadb.Collection:
     client = chromadb.PersistentClient(path="./data/chroma_db")
     collection = client.get_or_create_collection(name=collection_name)
 
@@ -69,11 +107,11 @@ def build_index(chunks: list[str], collection_name: str = "doc") -> chromadb.Col
         documents=chunks,
         ids=[f"chunk_{offset + i}" for i in range(len(chunks))]
     )
-    print(f"Indexed {len(chunks)} chunks (collection now has {collection.count()} total)")
+    print(f"Indexed {len(chunks)} chunks into '{collection_name}' (collection now has {collection.count()} total)")
 
     return collection
 
-def load_index(collection_name: str = "doc") -> chromadb.Collection:
+def load_index(collection_name: str = HOMELAB_COLLECTION) -> chromadb.Collection:
     client = chromadb.PersistentClient(path="./data/chroma_db")
     return client.get_collection(name=collection_name)
 
@@ -96,41 +134,19 @@ def query_index(collection: chromadb.Collection, question: str, n_results: int =
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python embeddings.py <filepath or url>")
+        print("Usage: python embeddings.py <filepath or url> [collection_name]")
+        print(f"  collection_name defaults to '{HOMELAB_COLLECTION}'")
         sys.exit(1)
 
     source = sys.argv[1]
+    coll = sys.argv[2] if len(sys.argv) > 2 else HOMELAB_COLLECTION
 
     try:
-        count = ingest(source)
-        print(f"\nDone. {count} chunks ingested from: {source}")
+        count = ingest(source, collection_name=coll)
+        print(f"\nDone. {count} chunks ingested from: {source} into '{coll}'")
     except FileNotFoundError:
         print(f"Error: File not found — {source}")
         sys.exit(1)
     except Exception as e:
         print(f"Error during ingestion: {e}")
         sys.exit(1)
-
-
-# Previously used for testing
-# if __name__ == "__main__":
-#     # Test it with fake chunks so we can see retrieval working
-#     fake_chunks = [
-#         "requests.get(url, params=None) sends a GET request and returns a Response object.",
-#         "requests.post(url, data=None, json=None) sends a POST request with a body.",
-#         "Response.status_code returns the HTTP status code as an integer, e.g. 200 or 404.",
-#         "Response.json() parses the response body as JSON and returns a Python dict.",
-#         "Session objects let you persist cookies and headers across multiple requests.",
-#         "Timeout parameter controls how long to wait for the server before giving up.",
-#     ]
-
-#     collection = build_index(fake_chunks)
-
-#     # Ask a question — watch which chunks come back
-#     question = "how do I send a POST request?"
-#     print(f"\nQuestion: {question}")
-#     print(f"\nTop relevant chunks:")
-    
-#     relevant = query_index(collection, question)
-#     for i, chunk in enumerate(relevant):
-#         print(f"\n  [{i+1}] {chunk}")

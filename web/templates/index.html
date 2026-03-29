@@ -107,6 +107,19 @@
       border-color: #7dd3fc;
     }
 
+    select {
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      color: #e2e8f0;
+      border-radius: 6px;
+      padding: 0.55rem 0.7rem;
+      font-size: 0.875rem;
+      outline: none;
+      cursor: pointer;
+    }
+
+    select:focus { border-color: #7dd3fc; }
+
     button {
       background: #1d4ed8;
       color: white;
@@ -120,6 +133,66 @@
 
     button:hover { background: #2563eb; }
     button:disabled { background: #334155; cursor: not-allowed; }
+
+    /* Tool badges */
+    .tool-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .tool-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .badge-homelab_rag    { background: #1e3a5f; color: #7dd3fc; }
+    .badge-supporting_rag { background: #1a3a2a; color: #86efac; }
+    .badge-web_search     { background: #3b2a1a; color: #fbbf24; }
+    .badge-command        { background: #2a1a3b; color: #c4b5fd; }
+
+    /* Command blocks */
+    .command-block {
+      background: #0a0c12;
+      border: 1px solid #4c1d95;
+      border-radius: 6px;
+      padding: 0.55rem 0.8rem;
+      margin-top: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .command-block code {
+      font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
+      font-size: 0.875rem;
+      color: #c4b5fd;
+      flex: 1;
+      word-break: break-all;
+    }
+
+    .copy-btn {
+      background: #4c1d95;
+      font-size: 0.75rem;
+      padding: 0.3rem 0.65rem;
+      flex-shrink: 0;
+      border-radius: 5px;
+    }
+
+    .copy-btn:hover { background: #6d28d9; }
+
+    .command-reasoning {
+      font-size: 0.8rem;
+      color: #7c6faa;
+      margin-top: 0.25rem;
+      font-style: italic;
+    }
 
     /* Ingest */
     .ingest-row {
@@ -136,10 +209,31 @@
     #ingest-status.success { color: #86efac; }
     #ingest-status.error   { color: #fca5a5; }
 
-    /* Sources list */
+    /* Sources */
+    .sources-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .tab-btn {
+      font-size: 0.8rem;
+      padding: 0.35rem 0.8rem;
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      color: #94a3b8;
+    }
+
+    .tab-btn.active {
+      background: #1d4ed8;
+      border-color: #1d4ed8;
+      color: white;
+    }
+
+    .tab-btn:hover:not(.active) { background: #1e2130; }
+
     #sources-list {
       list-style: none;
-      margin-top: 1rem;
       display: flex;
       flex-direction: column;
       gap: 0.4rem;
@@ -186,10 +280,13 @@
 
     <!-- Chat -->
     <div class="card">
-      <h2>Ask a Question</h2>
+      <div class="card-header">
+        <h2>Ask a Question</h2>
+        <button class="danger" onclick="resetChat()">New Conversation</button>
+      </div>
       <div id="chat-log"></div>
       <div class="input-row">
-        <input id="question-input" type="text" placeholder="Ask about your homelab docs..." />
+        <input id="question-input" type="text" placeholder="Ask about your homelab..." />
         <button id="ask-btn" onclick="askQuestion()">Ask</button>
       </div>
     </div>
@@ -201,10 +298,20 @@
         <button class="danger" onclick="resetIndex()">Delete Index</button>
       </div>
       <div class="ingest-row">
-        <input id="source-input" type="text" placeholder="File path or URL (e.g. ./docs/setup.md)" />
+        <input id="source-input" type="text" placeholder="File path or URL" />
+        <select id="collection-select">
+          <option value="homelab">Homelab (my docs)</option>
+          <option value="supporting">Supporting (manuals/guides)</option>
+        </select>
         <button id="ingest-btn" onclick="ingestDocument()">Add</button>
       </div>
       <div id="ingest-status"></div>
+
+      <!-- Sources tabs -->
+      <div class="sources-tabs">
+        <button class="tab-btn active" id="tab-homelab" onclick="switchTab('homelab')">Homelab Docs</button>
+        <button class="tab-btn" id="tab-supporting" onclick="switchTab('supporting')">Supporting Docs</button>
+      </div>
       <ul id="sources-list"></ul>
       <p id="sources-empty"></p>
     </div>
@@ -213,6 +320,66 @@
 
   <script>
     const chatLog = document.getElementById("chat-log");
+    let activeTab = "homelab";
+
+    function appendAgentMessage(data) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "message agent";
+
+      // Tool badges
+      if (data.tools_used && data.tools_used.length > 0) {
+        const badgeRow = document.createElement("div");
+        badgeRow.className = "tool-badges";
+        data.tools_used.forEach(tool => {
+          const badge = document.createElement("span");
+          badge.className = `tool-badge badge-${tool}`;
+          badge.textContent = tool.replace("_", " ");
+          badgeRow.appendChild(badge);
+        });
+        wrapper.appendChild(badgeRow);
+      }
+
+      // Answer text
+      const answerEl = document.createElement("div");
+      answerEl.textContent = data.answer;
+      wrapper.appendChild(answerEl);
+
+      // Command blocks
+      if (data.commands && data.commands.length > 0) {
+        data.commands.forEach(({ command: cmd, reasoning }) => {
+          if (!cmd) return;
+          const block = document.createElement("div");
+          block.className = "command-block";
+
+          const code = document.createElement("code");
+          code.textContent = cmd;
+
+          const copyBtn = document.createElement("button");
+          copyBtn.className = "copy-btn";
+          copyBtn.textContent = "Copy";
+          copyBtn.onclick = () => {
+            navigator.clipboard.writeText(cmd).then(() => {
+              copyBtn.textContent = "Copied!";
+              setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+            });
+          };
+
+          block.appendChild(code);
+          block.appendChild(copyBtn);
+          wrapper.appendChild(block);
+
+          if (reasoning) {
+            const reasonEl = document.createElement("div");
+            reasonEl.className = "command-reasoning";
+            reasonEl.textContent = reasoning;
+            wrapper.appendChild(reasonEl);
+          }
+        });
+      }
+
+      chatLog.appendChild(wrapper);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
 
     function appendMessage(text, type) {
       const el = document.createElement("div");
@@ -242,7 +409,7 @@
         if (data.error) {
           appendMessage(data.error, "error");
         } else {
-          appendMessage(data.answer, "agent");
+          appendAgentMessage(data);
         }
       } catch (e) {
         appendMessage("Failed to reach the server.", "error");
@@ -256,6 +423,7 @@
       const input = document.getElementById("source-input");
       const btn = document.getElementById("ingest-btn");
       const status = document.getElementById("ingest-status");
+      const collection = document.getElementById("collection-select").value;
       const source = input.value.trim();
       if (!source) return;
 
@@ -267,7 +435,7 @@
         const res = await fetch("/ingest", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ source })
+          body: JSON.stringify({ source, collection })
         });
         const data = await res.json();
         if (data.error) {
@@ -277,7 +445,7 @@
           status.textContent = data.message;
           status.className = data.failed && data.failed.length > 0 ? "error" : "success";
           input.value = "";
-          loadSources();
+          loadSources(activeTab);
 
           if (data.failed && data.failed.length > 0) {
             const failList = data.failed.map(f => `• ${f.source}: ${f.error}`).join("\n");
@@ -292,15 +460,24 @@
       }
     }
 
-    async function loadSources() {
+    function switchTab(collection) {
+      activeTab = collection;
+      document.getElementById("tab-homelab").className =
+        "tab-btn" + (collection === "homelab" ? " active" : "");
+      document.getElementById("tab-supporting").className =
+        "tab-btn" + (collection === "supporting" ? " active" : "");
+      loadSources(collection);
+    }
+
+    async function loadSources(collection = "homelab") {
       const list = document.getElementById("sources-list");
       const empty = document.getElementById("sources-empty");
       try {
-        const res = await fetch("/sources");
+        const res = await fetch(`/sources?collection=${collection}`);
         const data = await res.json();
         list.innerHTML = "";
         if (data.sources.length === 0) {
-          empty.textContent = "No documents indexed yet.";
+          empty.textContent = `No documents in ${collection} collection.`;
         } else {
           empty.textContent = "";
           data.sources.forEach(src => {
@@ -314,11 +491,25 @@
       }
     }
 
+    async function resetChat() {
+      if (!confirm("Clear the current conversation?")) return;
+      try {
+        await fetch("/reset-chat", { method: "POST" });
+        document.getElementById("chat-log").innerHTML = "";
+      } catch (e) {
+        appendMessage("Failed to reset conversation.", "error");
+      }
+    }
+
     async function resetIndex() {
-      if (!confirm("Delete the entire index and start fresh?")) return;
+      if (!confirm("Delete the entire index (both collections) and start fresh?")) return;
       const status = document.getElementById("ingest-status");
       try {
-        const res = await fetch("/reset", { method: "POST" });
+        const res = await fetch("/reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({})
+        });
         const data = await res.json();
         if (data.error) {
           status.textContent = data.error;
@@ -326,7 +517,7 @@
         } else {
           status.textContent = data.message;
           status.className = "success";
-          loadSources();
+          loadSources(activeTab);
         }
       } catch (e) {
         status.textContent = "Failed to reach the server.";
@@ -342,7 +533,7 @@
       if (e.key === "Enter") ingestDocument();
     });
 
-    loadSources();
+    loadSources("homelab");
   </script>
 </body>
 </html>
